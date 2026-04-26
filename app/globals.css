@@ -11,7 +11,7 @@ button, input, textarea, select { font: inherit; }
 .card { border: 1px solid rgba(255,255,255,.1); background: rgba(20, 15, 38, .72); box-shadow: 0 20px 70px rgba(0,0,0,.38); border-radius: 28px; padding: 24px; backdrop-filter: blur(18px); }
 .stickyCard { position: sticky; top: 96px; }
 h1 { font-size: clamp(34px, 5vw, 64px); margin: 0 0 10px; letter-spacing: -.065em; line-height: .95; }
-h2 { margin: 0 0 14px; font-size: 24px; letter-spacing: -.03em; }
+h2 { margin: 0 0 14px; font-size: 24px; letter-spacing: -.03em; display: flex; align-items: center; gap: 8px; }
 h3 { margin: 0; letter-spacing: -.03em; }
 p { color: #bdb4d4; line-height: 1.6; }
 label { display: block; color: #a99fc4; font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .12em; margin: 16px 0 8px; }
@@ -42,6 +42,13 @@ a { color: #27e7ff; }
 .miniExplorer { margin-top: 24px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.08); }
 .sectionHead { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
 .sectionHead p { margin: 0; }
+.voiceLab { background: linear-gradient(135deg, rgba(33,232,255,.1), rgba(255,55,199,.08)), rgba(20,15,38,.72); }
+.voiceGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.uploadBox { min-height: 120px; border: 1px dashed rgba(37,234,255,.42); border-radius: 22px; background: rgba(37,234,255,.06); display: grid; place-items: center; gap: 8px; text-align: center; padding: 18px; cursor: pointer; color: #dffbff; text-transform: none; letter-spacing: 0; font-size: 14px; font-weight: 700; }
+.uploadBox input { display: none; }
+.voiceTips { border: 1px solid rgba(255,255,255,.1); border-radius: 22px; padding: 18px; background: rgba(0,0,0,.16); }
+.voiceBadge { padding: 9px 13px; border-radius: 999px; border: 1px solid rgba(255,255,255,.14); color: #bdb4d4; background: rgba(255,255,255,.05); }
+.voiceBadge.ready { border-color: rgba(37,234,255,.5); color: #25eaff; background: rgba(37,234,255,.12); }
 .explorerLayout { display: grid; grid-template-columns: 300px 1fr; gap: 18px; }
 .tagPanel { border: 1px solid rgba(255,255,255,.09); border-radius: 22px; padding: 16px; background: rgba(7,5,16,.35); align-self: start; position: sticky; top: 96px; }
 .searchBox { display: flex; align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,.12); border-radius: 16px; background: rgba(8,6,18,.78); padding: 0 12px; }
@@ -61,4 +68,4 @@ a { color: #27e7ff; }
 .tinyWave { height: 50px; display: flex; align-items: center; gap: 3px; padding: 8px; border-radius: 14px; background: rgba(0,0,0,.18); overflow: hidden; }
 .tinyWave span { width: 5px; border-radius: 999px; background: linear-gradient(#22eaff, #fa37c6); opacity: .8; }
 .emptyState { min-height: 220px; border: 1px dashed rgba(255,255,255,.16); border-radius: 22px; display: grid; place-items: center; text-align: center; color: #bdb4d4; }
-@media (max-width: 900px) { .grid, .row, .explorerLayout, .songShelf.list .songCard { grid-template-columns: 1fr; } .header { padding: 16px; } .stickyCard, .tagPanel { position: static; } .sectionHead { flex-direction: column; } }
+@media (max-width: 900px) { .grid, .row, .explorerLayout, .songShelf.list .songCard, .voiceGrid { grid-template-columns: 1fr; } .header { padding: 16px; } .stickyCard, .tagPanel { position: static; } .sectionHead { flex-direction: column; } }
