@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { callSonauto, normalizeStatus } from '@/app/lib/sonauto';
+import { callSonauto, normalizeStatus } from '../../../lib/sonauto';
 
 export async function GET(req) {
   try {
