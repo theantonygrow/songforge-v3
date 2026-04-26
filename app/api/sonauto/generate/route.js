@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { callSonauto, extractTaskId } from '@/app/lib/sonauto';
+import { callSonauto, extractTaskId } from '../../../lib/sonauto';
 
 export async function POST(req) {
   try {
