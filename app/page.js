@@ -1,11 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Music2, Sparkles, Play, Download, RefreshCw, Search, Heart, Trash2, Tag, Grid3X3, ListMusic } from 'lucide-react';
+import { Music2, Sparkles, Play, Download, RefreshCw, Search, Heart, Trash2, Tag, Grid3X3, ListMusic, Mic2, UploadCloud } from 'lucide-react';
 
 const genres = ['Pop', 'Trap', 'EDM', 'Rock', 'Indie', 'R&B', 'Ambient', 'Cinematic', 'Lo-fi'];
 const moods = ['Happy', 'Dark', 'Romantic', 'Energetic', 'Chill', 'Epic', 'Sad', 'Dreamy'];
-const styleTags = ['female vocal', 'male vocal', 'rap vocal', 'soft vocal', 'anthem', 'club', 'sad', 'romantic', 'cinematic', 'guitar', 'synth', 'piano', 'bass heavy', 'future pop', 'lo-fi', 'hyperpop'];
+const styleTags = ['female vocal', 'male vocal', 'rap vocal', 'soft vocal', 'anthem', 'club', 'sad', 'romantic', 'cinematic', 'guitar', 'synth', 'piano', 'bass heavy', 'future pop', 'lo-fi', 'hyperpop', 'my voice'];
 const steps = ['Queued', 'Submitted', 'Generating', 'Fetching result', 'Ready'];
 
 function makeBars() {
@@ -29,8 +29,8 @@ async function api(path, options) {
   return data;
 }
 
-function buildTags({ genre, mood, bpm, voiceStyle, language }) {
-  return [genre, mood, `${bpm} bpm feel`, voiceStyle, language, 'modern production'].filter(Boolean).join(', ');
+function buildTags({ genre, mood, bpm, voiceStyle, language, myVoiceEnabled }) {
+  return [genre, mood, `${bpm} bpm feel`, myVoiceEnabled ? 'my private voice, user-owned voice style' : voiceStyle, language, 'modern production'].filter(Boolean).join(', ');
 }
 
 function titleFromPrompt(prompt, genre, mood) {
@@ -61,12 +61,23 @@ export default function Home() {
   const [librarySearch, setLibrarySearch] = useState('');
   const [onlyLiked, setOnlyLiked] = useState(false);
   const [viewMode, setViewMode] = useState('grid');
+  const [myVoiceEnabled, setMyVoiceEnabled] = useState(false);
+  const [voiceName, setVoiceName] = useState('My Voice');
+  const [voiceFileName, setVoiceFileName] = useState('');
+  const [voiceStatus, setVoiceStatus] = useState('No voice sample uploaded yet.');
 
-  const tags = useMemo(() => buildTags({ genre, mood, bpm, voiceStyle, language }), [genre, mood, bpm, voiceStyle, language]);
+  const tags = useMemo(() => buildTags({ genre, mood, bpm, voiceStyle, language, myVoiceEnabled }), [genre, mood, bpm, voiceStyle, language, myVoiceEnabled]);
 
   useEffect(() => {
     setLibrary(readSongs());
     checkHealth();
+    const savedVoice = JSON.parse(localStorage.getItem('songforge_my_voice') || 'null');
+    if (savedVoice) {
+      setMyVoiceEnabled(Boolean(savedVoice.enabled));
+      setVoiceName(savedVoice.name || 'My Voice');
+      setVoiceFileName(savedVoice.fileName || 'saved voice sample');
+      setVoiceStatus(savedVoice.status || 'Private voice preset ready for tagging.');
+    }
   }, []);
 
   async function checkHealth() {
@@ -82,6 +93,22 @@ export default function Home() {
     setLibrary(readSongs());
   }
 
+  function handleVoiceUpload(file) {
+    if (!file) return;
+    const preset = {
+      enabled: true,
+      name: voiceName || 'My Voice',
+      fileName: file.name,
+      status: 'Private voice preset saved locally. Real voice conversion needs a connected voice-conversion provider.',
+      createdAt: new Date().toISOString(),
+    };
+    localStorage.setItem('songforge_my_voice', JSON.stringify(preset));
+    setMyVoiceEnabled(true);
+    setVoiceFileName(file.name);
+    setVoiceStatus(preset.status);
+    setVoiceStyle('My Voice');
+  }
+
   function demoGenerate() {
     const song = {
       id: crypto.randomUUID(),
@@ -93,6 +120,7 @@ export default function Home() {
       bpm,
       duration,
       tags,
+      voicePreset: myVoiceEnabled ? voiceName : voiceStyle,
       createdAt: new Date().toISOString(),
       audioUrl: '',
       liked: false,
@@ -171,6 +199,7 @@ export default function Home() {
         bpm,
         duration,
         tags,
+        voicePreset: myVoiceEnabled ? voiceName : voiceStyle,
         createdAt: new Date().toISOString(),
         audioUrl: result.audioUrl,
         songPaths: result.songPaths || [],
@@ -209,14 +238,14 @@ export default function Home() {
   }
 
   const allTags = useMemo(() => {
-    const fromSongs = library.flatMap((song) => [song.genre, song.mood, ...(song.tags || '').split(',').map((t) => t.trim()).filter(Boolean)]);
+    const fromSongs = library.flatMap((song) => [song.genre, song.mood, song.voicePreset, ...(song.tags || '').split(',').map((t) => t.trim()).filter(Boolean)]);
     return ['All', 'Liked', ...Array.from(new Set([...genres, ...moods, ...styleTags, ...fromSongs])).filter(Boolean)];
   }, [library]);
 
   const tagCounts = useMemo(() => {
     const counts = { All: library.length, Liked: library.filter((s) => s.liked).length };
     library.forEach((song) => {
-      [song.genre, song.mood, ...(song.tags || '').split(',').map((t) => t.trim())].filter(Boolean).forEach((tag) => {
+      [song.genre, song.mood, song.voicePreset, ...(song.tags || '').split(',').map((t) => t.trim())].filter(Boolean).forEach((tag) => {
         counts[tag] = (counts[tag] || 0) + 1;
       });
     });
@@ -226,7 +255,7 @@ export default function Home() {
   const filteredLibrary = useMemo(() => {
     const q = librarySearch.trim().toLowerCase();
     return library.filter((song) => {
-      const haystack = [song.title, song.prompt, song.lyrics, song.genre, song.mood, song.tags].join(' ').toLowerCase();
+      const haystack = [song.title, song.prompt, song.lyrics, song.genre, song.mood, song.tags, song.voicePreset].join(' ').toLowerCase();
       const matchesSearch = !q || haystack.includes(q);
       const matchesLiked = !onlyLiked || song.liked;
       const matchesTag = activeTag === 'All' || activeTag === 'Liked' ? true : haystack.includes(activeTag.toLowerCase());
@@ -271,7 +300,7 @@ export default function Home() {
             </div>
 
             <div className="row">
-              <div><label>Voice style</label><select value={voiceStyle} onChange={(e) => setVoiceStyle(e.target.value)}><option>Auto vocal</option><option>Female vocal</option><option>Male vocal</option><option>Soft vocal</option><option>Rap vocal</option></select></div>
+              <div><label>Voice style</label><select value={voiceStyle} onChange={(e) => setVoiceStyle(e.target.value)}><option>Auto vocal</option><option>Female vocal</option><option>Male vocal</option><option>Soft vocal</option><option>Rap vocal</option><option>My Voice</option></select></div>
               <div><label>Language</label><select value={language} onChange={(e) => setLanguage(e.target.value)}><option>English</option><option>Russian</option><option>Spanish</option><option>French</option></select></div>
             </div>
 
@@ -299,12 +328,44 @@ export default function Home() {
           </div>
         </div>
 
+        <section className="card voiceLab">
+          <div className="sectionHead">
+            <div>
+              <h2><Mic2 size={22} /> Sing with My Voice</h2>
+              <p>Upload your own clean voice sample, save a private preset, then use it as a vocal direction for new songs.</p>
+            </div>
+            <div className={`voiceBadge ${myVoiceEnabled ? 'ready' : ''}`}>{myVoiceEnabled ? 'My Voice ON' : 'Not configured'}</div>
+          </div>
+          <div className="voiceGrid">
+            <div>
+              <label>Voice preset name</label>
+              <input value={voiceName} onChange={(e) => setVoiceName(e.target.value)} placeholder="My Voice" />
+              <label>Upload voice sample</label>
+              <label className="uploadBox">
+                <UploadCloud size={24} />
+                <span>{voiceFileName || 'Choose WAV/MP3/M4A, 30-90 sec, no background music'}</span>
+                <input type="file" accept="audio/*" onChange={(e) => handleVoiceUpload(e.target.files?.[0])} />
+              </label>
+              <div className="actionRow">
+                <button className="secondary" onClick={() => { setMyVoiceEnabled(!myVoiceEnabled); localStorage.setItem('songforge_my_voice', JSON.stringify({ enabled: !myVoiceEnabled, name: voiceName, fileName: voiceFileName, status: voiceStatus })); }}>{myVoiceEnabled ? 'Disable My Voice' : 'Use My Voice'}</button>
+                <button className="secondary" onClick={() => { setVoiceStyle('My Voice'); setMyVoiceEnabled(true); }}>Apply to generator</button>
+              </div>
+            </div>
+            <div className="voiceTips">
+              <h3>How to record</h3>
+              <p>Record 30-90 seconds in a quiet room. Use headphones. Add speech and a short sung phrase. Russian lyrics are supported in the main generator.</p>
+              <div className="ok">{voiceStatus}</div>
+              <p className="small">Current build stores the preset locally and passes “my private voice” into tags. To truly convert a generated vocal into your voice, connect a voice-conversion provider API later.</p>
+            </div>
+          </div>
+        </section>
+
         {track && <div className="card track">
           <h2>{track.title}</h2>
           <p>{track.prompt}</p>
           <div className="wave">{makeBars().map((h, i) => <div key={i} className="bar" style={{ height: h }} />)}</div>
           {track.audioUrl ? <audio controls src={track.audioUrl} style={{ width: '100%' }} /> : <div className="ok">Demo track created. Add the server key for real audio.</div>}
-          <div className="chips"><span className="chip active">{track.genre}</span><span className="chip active">{track.mood}</span><span className="chip">{track.bpm} BPM</span></div>
+          <div className="chips"><span className="chip active">{track.genre}</span><span className="chip active">{track.mood}</span><span className="chip">{track.bpm} BPM</span>{track.voicePreset && <span className="chip">{track.voicePreset}</span>}</div>
           <div className="actionRow">
             <button className="secondary" onClick={() => toggleLike(track.id)}><Heart size={14} /> {track.liked ? 'Liked' : 'Like'}</button>
             {track.audioUrl && <a className="secondary" href={track.audioUrl} target="_blank"><Download size={14} /> Open / Download audio</a>}
@@ -346,7 +407,7 @@ export default function Home() {
                 <p className="songPrompt">{s.prompt}</p>
                 <div className="tinyWave">{makeBars().slice(0, 36).map((h, i) => <span key={i} style={{ height: Math.max(10, h / 2) }} />)}</div>
                 {s.audioUrl ? <audio controls src={s.audioUrl} style={{ width: '100%' }} /> : <button className="secondary"><Play size={14} /> Demo placeholder</button>}
-                <div className="chips compact"><button className="chip active" onClick={() => setActiveTag(s.genre)}>{s.genre}</button><button className="chip active" onClick={() => setActiveTag(s.mood)}>{s.mood}</button><span className="chip">{s.bpm} BPM</span></div>
+                <div className="chips compact"><button className="chip active" onClick={() => setActiveTag(s.genre)}>{s.genre}</button><button className="chip active" onClick={() => setActiveTag(s.mood)}>{s.mood}</button><span className="chip">{s.bpm} BPM</span>{s.voicePreset && <button className="chip" onClick={() => setActiveTag(s.voicePreset)}>{s.voicePreset}</button>}</div>
                 <div className="cardActions">
                   {s.audioUrl && <a className="secondary" href={s.audioUrl} target="_blank"><Download size={14} /> Download</a>}
                   <button className="secondary danger" onClick={() => deleteSong(s.id)}><Trash2 size={14} /> Delete</button>
