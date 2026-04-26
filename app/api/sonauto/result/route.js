@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { callSonauto, extractSongPaths } from '@/app/lib/sonauto';
+import { callSonauto, extractSongPaths } from '../../../lib/sonauto';
 
 export async function GET(req) {
   try {
