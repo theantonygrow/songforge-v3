@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Download, Grid3X3, Heart, ListMusic, Mic2, Music2, Play, RefreshCw, Search, Sparkles, Tag, Trash2, UploadCloud } from 'lucide-react';
+import { Download, Grid3X3, Heart, ListMusic, Mic2, Music2, Play, RefreshCw, Search, Sparkles, Tag, Trash2, UploadCloud, Wand2 } from 'lucide-react';
 
 const genres = ['Pop', 'Trap', 'EDM', 'Rock', 'Indie', 'R&B', 'Ambient', 'Cinematic', 'Lo-fi'];
 const moods = ['Happy', 'Dark', 'Romantic', 'Energetic', 'Chill', 'Epic', 'Sad', 'Dreamy'];
@@ -15,16 +15,12 @@ function readSongs() {
   if (typeof window === 'undefined') return [];
   return JSON.parse(localStorage.getItem('songforge_songs') || '[]');
 }
-function writeSongs(songs) {
-  localStorage.setItem('songforge_songs', JSON.stringify(songs.slice(0, 80)));
-}
-function saveSong(song) {
-  writeSongs([song, ...readSongs()]);
-}
+function writeSongs(songs) { localStorage.setItem('songforge_songs', JSON.stringify(songs.slice(0, 80))); }
+function saveSong(song) { writeSongs([song, ...readSongs()]); }
 async function api(path, options) {
   const res = await fetch(path, options);
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+  if (!res.ok) throw new Error(data.message || data.error || 'Request failed');
   return data;
 }
 function buildTags({ genre, mood, bpm, voiceStyle, language, myVoiceEnabled }) {
@@ -36,7 +32,7 @@ function titleFromPrompt(prompt, genre, mood) {
 }
 
 export default function Home() {
-  const [prompt, setPrompt] = useState('dreamy pop song about searching for yourself and future love');
+  const [prompt, setPrompt] = useState('мечтательная поп-песня на русском про поиск себя, любовь и будущее');
   const [lyrics, setLyrics] = useState('');
   const [genre, setGenre] = useState('Pop');
   const [mood, setMood] = useState('Dreamy');
@@ -52,6 +48,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [track, setTrack] = useState(null);
   const [health, setHealth] = useState(null);
+  const [voiceProvider, setVoiceProvider] = useState(null);
   const [library, setLibrary] = useState([]);
   const [demoMode, setDemoMode] = useState(false);
   const [activeTag, setActiveTag] = useState('All');
@@ -65,6 +62,8 @@ export default function Home() {
   const [voiceStatus, setVoiceStatus] = useState('Upload a voice sample to activate My Voice.');
   const [voicePreviewUrl, setVoicePreviewUrl] = useState('');
   const [voiceStage, setVoiceStage] = useState('idle');
+  const [converting, setConverting] = useState(false);
+  const [convertStatus, setConvertStatus] = useState('');
 
   const tags = useMemo(() => buildTags({ genre, mood, bpm, voiceStyle, language, myVoiceEnabled }), [genre, mood, bpm, voiceStyle, language, myVoiceEnabled]);
 
@@ -82,77 +81,49 @@ export default function Home() {
   }, []);
 
   async function checkHealth() {
-    try { setHealth(await api('/api/sonauto/health')); }
-    catch { setHealth({ configured: false }); }
+    try { setHealth(await api('/api/sonauto/health')); } catch { setHealth({ configured: false }); }
+    try { setVoiceProvider(await api('/api/voice/health')); } catch { setVoiceProvider({ configured: false }); }
   }
   function refreshLibrary() { setLibrary(readSongs()); }
+  function updateSongInLibrary(id, patch) {
+    const updated = readSongs().map((s) => s.id === id ? { ...s, ...patch } : s);
+    writeSongs(updated); setLibrary(updated);
+  }
 
   function handleVoiceUpload(file) {
     if (!file) return;
-    if (!file.type.startsWith('audio/')) {
-      setVoiceStatus('Please upload an audio file: WAV, MP3, M4A or WEBM.');
-      setVoiceStage('error');
-      return;
-    }
+    if (!file.type.startsWith('audio/')) { setVoiceStatus('Please upload an audio file: WAV, MP3, M4A or WEBM.'); setVoiceStage('error'); return; }
     if (voicePreviewUrl) URL.revokeObjectURL(voicePreviewUrl);
     const previewUrl = URL.createObjectURL(file);
-    setVoicePreviewUrl(previewUrl);
-    setVoiceFileName(file.name);
-    setVoiceStage('uploaded');
+    setVoicePreviewUrl(previewUrl); setVoiceFileName(file.name); setVoiceStage('uploaded');
     setVoiceStatus(`Voice sample loaded: ${file.name}. Now press “Create My Voice preset”.`);
   }
-
   async function createMyVoicePreset() {
-    if (!voiceFileName) {
-      setVoiceStatus('First upload your voice sample.');
-      setVoiceStage('error');
-      return;
-    }
-    setVoiceStage('processing');
-    setVoiceStatus('Analyzing sample and creating local private preset...');
+    if (!voiceFileName) { setVoiceStatus('First upload your voice sample.'); setVoiceStage('error'); return; }
+    setVoiceStage('processing'); setVoiceStatus('Analyzing sample and creating local private preset...');
     await new Promise((r) => setTimeout(r, 900));
-    const preset = {
-      enabled: true,
-      name: voiceName || 'My Voice',
-      fileName: voiceFileName,
-      status: 'Private voice preset is ready. It is applied to the generator as “my private voice”.',
-      createdAt: new Date().toISOString(),
-    };
+    const preset = { enabled: true, name: voiceName || 'My Voice', fileName: voiceFileName, status: 'Private voice preset is ready. It is applied to the generator as “my private voice”.', createdAt: new Date().toISOString() };
     localStorage.setItem('songforge_my_voice', JSON.stringify(preset));
-    setMyVoiceEnabled(true);
-    setVoiceStyle('My Voice');
-    setVoiceStage('ready');
-    setVoiceStatus(preset.status);
+    setMyVoiceEnabled(true); setVoiceStyle('My Voice'); setVoiceStage('ready'); setVoiceStatus(preset.status);
   }
-
   function applyMyVoice() {
-    if (!voiceFileName && !myVoiceEnabled) {
-      setVoiceStatus('Upload a voice sample and create the preset first.');
-      setVoiceStage('error');
-      return;
-    }
-    setMyVoiceEnabled(true);
-    setVoiceStyle('My Voice');
-    setVoiceStage('ready');
+    if (!voiceFileName && !myVoiceEnabled) { setVoiceStatus('Upload a voice sample and create the preset first.'); setVoiceStage('error'); return; }
+    setMyVoiceEnabled(true); setVoiceStyle('My Voice'); setVoiceStage('ready');
     localStorage.setItem('songforge_my_voice', JSON.stringify({ enabled: true, name: voiceName, fileName: voiceFileName, status: 'Private voice preset is ready.' }));
     setVoiceStatus('My Voice is now selected. Press Generate Song above.');
   }
-
   function disableMyVoice() {
-    setMyVoiceEnabled(false);
-    if (voiceStyle === 'My Voice') setVoiceStyle('Auto vocal');
+    setMyVoiceEnabled(false); if (voiceStyle === 'My Voice') setVoiceStyle('Auto vocal');
     localStorage.setItem('songforge_my_voice', JSON.stringify({ enabled: false, name: voiceName, fileName: voiceFileName, status: 'My Voice is saved but disabled.' }));
-    setVoiceStatus('My Voice is saved but disabled.');
-    setVoiceStage('saved');
+    setVoiceStatus('My Voice is saved but disabled.'); setVoiceStage('saved');
   }
 
   async function demoGenerate() {
     const song = { id: crypto.randomUUID(), title: titleFromPrompt(prompt, genre, mood), prompt, lyrics, genre, mood, bpm, duration, tags, voicePreset: myVoiceEnabled ? voiceName : voiceStyle, createdAt: new Date().toISOString(), audioUrl: '', liked: false, demo: true };
     setTrack(song); saveSong(song); refreshLibrary();
   }
-
   async function generate() {
-    setError(''); setTrack(null);
+    setError(''); setTrack(null); setConvertStatus('');
     if (!prompt.trim() && !lyrics.trim()) { setError('Add a prompt or lyrics first.'); return; }
     if (myVoiceEnabled) setVoiceStatus('My Voice is attached as vocal direction for this generation.');
 
@@ -180,51 +151,50 @@ export default function Home() {
       const result = await api(`/api/sonauto/result?taskId=${encodeURIComponent(gen.taskId)}`);
       if (!result.audioUrl) throw new Error('No audio URL returned by provider.');
       setCurrentStep(4);
-      const song = { id: gen.taskId, taskId: gen.taskId, title: titleFromPrompt(prompt, genre, mood), prompt, lyrics, genre, mood, bpm, duration, tags, voicePreset: myVoiceEnabled ? voiceName : voiceStyle, createdAt: new Date().toISOString(), audioUrl: result.audioUrl, songPaths: result.songPaths || [], liked: false };
+      const song = { id: gen.taskId, taskId: gen.taskId, title: titleFromPrompt(prompt, genre, mood), prompt, lyrics, genre, mood, bpm, duration, tags, voicePreset: myVoiceEnabled ? voiceName : voiceStyle, createdAt: new Date().toISOString(), audioUrl: result.audioUrl, originalAudioUrl: result.audioUrl, songPaths: result.songPaths || [], liked: false };
       setTrack(song); saveSong(song); refreshLibrary();
+      if (myVoiceEnabled) setConvertStatus('Song is ready. Press “Convert to My Voice” to run the voice-conversion step.');
     } catch (e) { setError(e.message); }
     finally { setRunning(false); }
   }
 
+  async function convertTrackToMyVoice(song = track) {
+    setError(''); setConvertStatus('');
+    if (!song?.audioUrl) { setConvertStatus('Generate a real audio track first. Demo placeholders cannot be converted.'); return; }
+    if (!myVoiceEnabled) { setConvertStatus('Create and apply My Voice preset first.'); return; }
+    setConverting(true); setConvertStatus('Sending track to voice conversion...');
+    try {
+      const result = await api('/api/voice/convert', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audioUrl: song.audioUrl, voiceName, voiceFileName, language }) });
+      const updated = { ...song, originalAudioUrl: song.originalAudioUrl || song.audioUrl, audioUrl: result.convertedAudioUrl, convertedAudioUrl: result.convertedAudioUrl, voiceConverted: true, voicePreset: voiceName };
+      setTrack(updated); updateSongInLibrary(song.id, updated); setConvertStatus('Done: converted My Voice version is now in the player and Library.');
+    } catch (e) { setConvertStatus(e.message); }
+    finally { setConverting(false); }
+  }
+
   function toggleLike(id) {
     const updated = readSongs().map((s) => s.id === id ? { ...s, liked: !s.liked } : s);
-    writeSongs(updated); setLibrary(updated);
-    if (track?.id === id) setTrack({ ...track, liked: !track.liked });
+    writeSongs(updated); setLibrary(updated); if (track?.id === id) setTrack({ ...track, liked: !track.liked });
   }
-  function deleteSong(id) {
-    const updated = readSongs().filter((s) => s.id !== id);
-    writeSongs(updated); setLibrary(updated); if (track?.id === id) setTrack(null);
-  }
-  function useTemplate(tag) {
-    setActiveTag(tag); if (genres.includes(tag)) setGenre(tag); if (moods.includes(tag)) setMood(tag);
-    setPrompt(`${tag.toLowerCase()} song with polished vocals, memorable hook, modern production`);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
+  function deleteSong(id) { const updated = readSongs().filter((s) => s.id !== id); writeSongs(updated); setLibrary(updated); if (track?.id === id) setTrack(null); }
+  function useTemplate(tag) { setActiveTag(tag); if (genres.includes(tag)) setGenre(tag); if (moods.includes(tag)) setMood(tag); setPrompt(`${tag.toLowerCase()} song with polished vocals, memorable hook, modern production`); window.scrollTo({ top: 0, behavior: 'smooth' }); }
 
   const allTags = useMemo(() => {
     const fromSongs = library.flatMap((song) => [song.genre, song.mood, song.voicePreset, ...(song.tags || '').split(',').map((t) => t.trim()).filter(Boolean)]);
     return ['All', 'Liked', ...Array.from(new Set([...genres, ...moods, ...styleTags, ...fromSongs])).filter(Boolean)];
   }, [library]);
-  const tagCounts = useMemo(() => {
-    const counts = { All: library.length, Liked: library.filter((s) => s.liked).length };
-    library.forEach((song) => [song.genre, song.mood, song.voicePreset, ...(song.tags || '').split(',').map((t) => t.trim())].filter(Boolean).forEach((tag) => { counts[tag] = (counts[tag] || 0) + 1; }));
-    return counts;
-  }, [library]);
+  const tagCounts = useMemo(() => { const counts = { All: library.length, Liked: library.filter((s) => s.liked).length }; library.forEach((song) => [song.genre, song.mood, song.voicePreset, ...(song.tags || '').split(',').map((t) => t.trim())].filter(Boolean).forEach((tag) => { counts[tag] = (counts[tag] || 0) + 1; })); return counts; }, [library]);
   const filteredLibrary = useMemo(() => {
     const q = librarySearch.trim().toLowerCase();
-    return library.filter((song) => {
-      const haystack = [song.title, song.prompt, song.lyrics, song.genre, song.mood, song.tags, song.voicePreset].join(' ').toLowerCase();
-      return (!q || haystack.includes(q)) && (!onlyLiked || song.liked) && (activeTag === 'All' || activeTag === 'Liked' || haystack.includes(activeTag.toLowerCase())) && (activeTag !== 'Liked' || song.liked);
-    });
+    return library.filter((song) => { const haystack = [song.title, song.prompt, song.lyrics, song.genre, song.mood, song.tags, song.voicePreset].join(' ').toLowerCase(); return (!q || haystack.includes(q)) && (!onlyLiked || song.liked) && (activeTag === 'All' || activeTag === 'Liked' || haystack.includes(activeTag.toLowerCase())) && (activeTag !== 'Liked' || song.liked); });
   }, [library, librarySearch, onlyLiked, activeTag]);
 
   return (
     <main className="app">
-      <header className="header"><div className="logo"><div className="logoIcon"><Music2 size={22} /></div><div>SongForge<br /><span className="small">v3 Studio</span></div></div><div className="badge">{health?.configured ? 'API ready' : 'Demo mode / key missing'}</div></header>
+      <header className="header"><div className="logo"><div className="logoIcon"><Music2 size={22} /></div><div>SongForge<br /><span className="small">v3 Studio</span></div></div><div className="badge">{health?.configured ? 'API ready' : 'Demo mode / key missing'} · Voice {voiceProvider?.configured ? 'ready' : 'not connected'}</div></header>
       <section className="wrap">
         <div className="grid">
           <div className="card">
-            <h1>Create studio-ready songs from ideas.</h1><p>Secure Vercel backend proxy. Your API key stays server-side only.</p>
+            <h1>Create studio-ready songs from ideas.</h1><p>First generate a song. Then use My Voice conversion when a provider is connected.</p>
             {health?.configured === false && <div className="error">Server API key is not configured. Add SONAUTO_API_KEY in Vercel Environment Variables to enable real generation.</div>}{error && <div className="error">{error}</div>}
             <label>Prompt</label><textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Describe the song..." />
             <label>Lyrics optional</label><textarea value={lyrics} onChange={(e) => setLyrics(e.target.value)} placeholder="Paste Russian or English lyrics..." />
@@ -240,21 +210,21 @@ export default function Home() {
         </div>
 
         <section className="card voiceLab">
-          <div className="sectionHead"><div><h2><Mic2 size={22} /> Sing with My Voice</h2><p>Upload your own voice sample, create a private preset, then press Apply to generator.</p></div><div className={`voiceBadge ${myVoiceEnabled ? 'ready' : ''}`}>{myVoiceEnabled ? 'My Voice ON' : voiceStage}</div></div>
+          <div className="sectionHead"><div><h2><Mic2 size={22} /> Sing with My Voice</h2><p>Upload your own voice sample, create a private preset, then convert a finished track.</p></div><div className={`voiceBadge ${myVoiceEnabled ? 'ready' : ''}`}>{myVoiceEnabled ? 'My Voice ON' : voiceStage}</div></div>
           <div className="voiceGrid">
             <div><label>Voice preset name</label><input value={voiceName} onChange={(e) => setVoiceName(e.target.value)} placeholder="My Voice" />
               <label>Upload voice sample</label><label className="uploadBox"><UploadCloud size={24} /><span>{voiceFileName || 'Tap here and choose WAV/MP3/M4A/WEBM'}</span><input type="file" accept="audio/*" onChange={(e) => handleVoiceUpload(e.target.files?.[0])} /></label>
               {voicePreviewUrl && <audio controls src={voicePreviewUrl} style={{ width: '100%', marginTop: 12 }} />}
               <div className="actionRow"><button className="secondary" onClick={createMyVoicePreset}>Create My Voice preset</button><button className="secondary" onClick={applyMyVoice}>Apply to generator</button><button className="secondary" onClick={disableMyVoice}>Disable</button></div></div>
-            <div className="voiceTips"><h3>Voice status</h3><div className={voiceStage === 'error' ? 'error' : 'ok'}>{voiceStatus}</div><p>After applying, the generator sends <b>my private voice</b> in tags and saves songs with your voice preset. Full audio-to-audio voice conversion needs a separate conversion API.</p><p className="small">Tip: record 30–90 seconds in a quiet room, no background music. Add speech and 10 seconds of singing.</p></div>
+            <div className="voiceTips"><h3>Voice status</h3><div className={voiceStage === 'error' ? 'error' : 'ok'}>{voiceStatus}</div><p>Voice provider: <b>{voiceProvider?.configured ? 'connected' : 'not connected'}</b>. When not connected, Convert to My Voice will show what keys are missing.</p><p className="small">Add later in Vercel: VOICE_CONVERSION_API_URL and VOICE_CONVERSION_API_KEY.</p></div>
           </div>
         </section>
 
-        {track && <div className="card track"><h2>{track.title}</h2><p>{track.prompt}</p><div className="wave">{makeBars().map((h, i) => <div key={i} className="bar" style={{ height: h }} />)}</div>{track.audioUrl ? <audio controls src={track.audioUrl} style={{ width: '100%' }} /> : <div className="ok">Demo track created. Add the server key for real audio.</div>}<div className="chips"><span className="chip active">{track.genre}</span><span className="chip active">{track.mood}</span><span className="chip">{track.bpm} BPM</span>{track.voicePreset && <span className="chip">{track.voicePreset}</span>}</div><div className="actionRow"><button className="secondary" onClick={() => toggleLike(track.id)}><Heart size={14} /> {track.liked ? 'Liked' : 'Like'}</button>{track.audioUrl && <a className="secondary" href={track.audioUrl} target="_blank"><Download size={14} /> Open / Download audio</a>}</div></div>}
+        {track && <div className="card track"><h2>{track.title}</h2><p>{track.prompt}</p><div className="wave">{makeBars().map((h, i) => <div key={i} className="bar" style={{ height: h }} />)}</div>{track.audioUrl ? <audio controls src={track.audioUrl} style={{ width: '100%' }} /> : <div className="ok">Demo track created. Add the server key for real audio.</div>}<div className="chips"><span className="chip active">{track.genre}</span><span className="chip active">{track.mood}</span><span className="chip">{track.bpm} BPM</span>{track.voicePreset && <span className="chip">{track.voicePreset}</span>}{track.voiceConverted && <span className="chip active">converted</span>}</div>{convertStatus && <div className={convertStatus.startsWith('Done') ? 'ok' : 'error'}>{convertStatus}</div>}<div className="actionRow"><button className="secondary" onClick={() => toggleLike(track.id)}><Heart size={14} /> {track.liked ? 'Liked' : 'Like'}</button><button className="secondary" onClick={() => convertTrackToMyVoice()} disabled={converting || !track.audioUrl}><Wand2 size={14} /> {converting ? 'Converting...' : 'Convert to My Voice'}</button>{track.audioUrl && <a className="secondary" href={track.audioUrl} target="_blank"><Download size={14} /> Open / Download audio</a>}</div></div>}
 
         <section className="card tagExplorer"><div className="sectionHead"><div><h2>Library Tag Explorer</h2><p>Browse generated songs by genre, mood, voice style and production tags.</p></div><div className="viewSwitch"><button className={`secondary ${viewMode === 'grid' ? 'selected' : ''}`} onClick={() => setViewMode('grid')}><Grid3X3 size={14} /> Grid</button><button className={`secondary ${viewMode === 'list' ? 'selected' : ''}`} onClick={() => setViewMode('list')}><ListMusic size={14} /> List</button></div></div>
           <div className="explorerLayout"><aside className="tagPanel"><div className="searchBox"><Search size={16} /><input value={librarySearch} onChange={(e) => setLibrarySearch(e.target.value)} placeholder="Search songs or tags..." /></div><button className={`tagLine ${onlyLiked ? 'active' : ''}`} onClick={() => setOnlyLiked(!onlyLiked)}><Heart size={15} /> Liked only <span>{tagCounts.Liked || 0}</span></button><label>Popular tags</label><div className="tagList">{allTags.map((tag) => <button key={tag} className={`tagLine ${activeTag === tag ? 'active' : ''}`} onClick={() => setActiveTag(tag)}><span>{tag}</span><em>{tagCounts[tag] || 0}</em></button>)}</div></aside>
-            <div className={`songShelf ${viewMode}`}>{filteredLibrary.length === 0 && <div className="emptyState"><h3>No songs found</h3><p>Generate a song or choose another tag.</p></div>}{filteredLibrary.map((s) => <article className="songCard" key={s.id}><div className="songTop"><div><h3>{s.title}</h3><p className="small">{new Date(s.createdAt).toLocaleString()}</p></div><button className={`iconBtn ${s.liked ? 'liked' : ''}`} onClick={() => toggleLike(s.id)}><Heart size={16} /></button></div><p className="songPrompt">{s.prompt}</p><div className="tinyWave">{makeBars(36).map((h, i) => <span key={i} style={{ height: Math.max(10, h / 2) }} />)}</div>{s.audioUrl ? <audio controls src={s.audioUrl} style={{ width: '100%' }} /> : <button className="secondary"><Play size={14} /> Demo placeholder</button>}<div className="chips compact"><button className="chip active" onClick={() => setActiveTag(s.genre)}>{s.genre}</button><button className="chip active" onClick={() => setActiveTag(s.mood)}>{s.mood}</button><span className="chip">{s.bpm} BPM</span>{s.voicePreset && <button className="chip" onClick={() => setActiveTag(s.voicePreset)}>{s.voicePreset}</button>}</div><div className="cardActions">{s.audioUrl && <a className="secondary" href={s.audioUrl} target="_blank"><Download size={14} /> Download</a>}<button className="secondary danger" onClick={() => deleteSong(s.id)}><Trash2 size={14} /> Delete</button></div></article>)}</div></div>
+            <div className={`songShelf ${viewMode}`}>{filteredLibrary.length === 0 && <div className="emptyState"><h3>No songs found</h3><p>Generate a song or choose another tag.</p></div>}{filteredLibrary.map((s) => <article className="songCard" key={s.id}><div className="songTop"><div><h3>{s.title}</h3><p className="small">{new Date(s.createdAt).toLocaleString()}</p></div><button className={`iconBtn ${s.liked ? 'liked' : ''}`} onClick={() => toggleLike(s.id)}><Heart size={16} /></button></div><p className="songPrompt">{s.prompt}</p><div className="tinyWave">{makeBars(36).map((h, i) => <span key={i} style={{ height: Math.max(10, h / 2) }} />)}</div>{s.audioUrl ? <audio controls src={s.audioUrl} style={{ width: '100%' }} /> : <button className="secondary"><Play size={14} /> Demo placeholder</button>}<div className="chips compact"><button className="chip active" onClick={() => setActiveTag(s.genre)}>{s.genre}</button><button className="chip active" onClick={() => setActiveTag(s.mood)}>{s.mood}</button><span className="chip">{s.bpm} BPM</span>{s.voicePreset && <button className="chip" onClick={() => setActiveTag(s.voicePreset)}>{s.voicePreset}</button>}{s.voiceConverted && <span className="chip active">converted</span>}</div><div className="cardActions">{s.audioUrl && <a className="secondary" href={s.audioUrl} target="_blank"><Download size={14} /> Download</a>}<button className="secondary danger" onClick={() => deleteSong(s.id)}><Trash2 size={14} /> Delete</button></div></article>)}</div></div>
         </section>
       </section>
     </main>
